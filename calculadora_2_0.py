@@ -1,0 +1,262 @@
+import math
+import operator
+import sys
+from datetime import datetime
+from random import choice
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QKeyEvent
+from PyQt5.QtWidgets import QPushButton, QWidget, QHBoxLayout, QLabel, QVBoxLayout, QApplication
+
+
+# Author: Joan Ciscar
+
+class Number:
+    def __call__(self, number):
+        try:
+            return int(number)
+        except ValueError:
+            try:
+                return float(number)
+            except ValueError:
+                return "Error"
+
+
+# Preguntar sobre las text labels, y sobre la tecla de retroceso.
+class CalculadoraBuffer:
+    @staticmethod
+    def test_calculadora():
+        test = CalculadoraBuffer()
+        rapid_fire = True  # Cambialo si quieres que vaya mas lento
+        last_second = datetime.now().second
+        things_test = []
+        things_test.extend("123456789/*-+/*-+C=")
+        things_test.extend([math.inf, math.nan])
+        while True:
+            if datetime.now().second != last_second or rapid_fire:
+                ele = choice(things_test)
+                print(f"Choice: {ele}")
+                test + ele
+                print(f"Buffer: {test}")
+                last_second = datetime.now().second
+
+    def __init__(self):
+        self.operand1 = None
+        self.operand2 = None
+        self.operator = None
+        self.__converser = Number()
+        self.operand1_is_negative = False
+        self.operand2_is_negative = False
+        self.at_next_number_refreshes = False
+        self.ops = {
+            "+": operator.add,
+            "-": operator.sub,
+            "*": operator.mul,
+            "/": operator.truediv,
+            "^": operator.pow
+        }
+
+    @property
+    def operand1(self):
+        if self.operand1_is_negative:
+            self.operand1_is_negative = False
+            return - self._operand1
+        return self._operand1
+
+    @operand1.setter
+    def operand1(self, value):
+        self._operand1 = value
+
+    @property
+    def operand2(self):
+        if self.operand2_is_negative:
+            self.operand2_is_negative = False
+            return - self._operand2
+        return self._operand2
+
+    @operand2.setter
+    def operand2(self, value):
+        self._operand2 = value
+
+    def add_operand(self, other):
+        if self.operator is not None:
+            if self.operand2 is None:
+                self.operand2 = 0
+            self.operand2 = self.__converser(f"{self.operand2}" + other)
+        else:
+            if self.operand1 is None or isinstance(self.operand1, str):
+                self.operand1 = 0
+            self.operand1 = self.__converser(f"{self.operand1}" + other)
+
+    def set_operator(self, other):
+        if self.operand1 is None or isinstance(self.operand1, str):
+            return
+        if self.operator is not None:  # and self.operand2 is not None:  # Resolvemos. O lo intentamos
+            try:
+                self.operand1 = self.ops[self.operator](self.operand1,
+                                                        self.operand2 if self.operand2 is not None else 0)
+            except ZeroDivisionError:
+                self.operand1 = "Error"
+                self.operand2 = None
+                self.operator = None
+                return
+            self.operand2 = None
+        if other != '=':
+            self.operator = other
+        else:
+            self.operator = None
+            self.at_next_number_refreshes = True
+
+    def sub(self, other: int = 1):
+        if self.operator is not None:
+            if self.operand2 is None:
+                self.operand2 = 0
+            print(type(self.operand2))
+            print(self.operand2)
+            self.operand2 = self.__converser(f"{self.operand2}"[:-other])
+            print(type(self.operand1))
+            print(self.operand1)
+            if self.operand2 == "Error":
+                self.operand2 = 0
+        else:
+            if self.operand1 is None or isinstance(self.operand1, str):
+                self.operand1 = 0
+            print(type(self.operand1))
+            print(self.operand1)
+            self.operand1 = self.__converser(f"{self.operand1}"[:-other])
+            if self.operand1 == "Error":
+                self.operand1 = 0
+
+    def __sub__(self, other):
+        self.sub(other)
+
+    def __add__(self, other):
+        self.add(other)
+
+    def add(self, other):
+        if isinstance(other, int) or isinstance(other, float):
+            other = f"{other}"
+        if isinstance(other, str):
+            other: str = other  # Para ver la ayuda con los metodos
+            if other.lower() != 'c':
+                if other.isdigit():
+                    if self.at_next_number_refreshes:
+                        self.operand1 = None
+                        self.at_next_number_refreshes = False
+                    self.add_operand(other)
+                else:
+                    if self.at_next_number_refreshes:
+                        self.at_next_number_refreshes = False
+                    self.set_operator(other)
+            else:
+                self.operand1 = self.operand2 = self.operator = None
+
+    def __str__(self):
+        if self.operand2 is None:
+            if self.operator is None:
+                if self.operand1 is None:
+                    return "0"
+                else:
+                    return f"{self.operand1}"
+            else:
+                return f"{self.operand1};{self.operator}"
+        else:
+            return f"{self.operand1};{self.operator};{self.operand2}"
+
+
+class CalculatorLabel(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.main_layout = QVBoxLayout()
+        self.setLayout(self.main_layout)
+        self.main_label = QLabel()
+        self.second_label = QLabel()
+        self.second_label.setFont(QFont("Arial", 18))
+        self.main_label.setFont(QFont("Arial", 35))
+        self.main_layout.addWidget(self.second_label)
+        self.main_layout.addWidget(self.main_label)
+        self.main_layout.setAlignment(Qt.AlignCenter | Qt.AlignRight)
+        self.setMaximumWidth(GUICalculator2.HORIZONTAL_MAX_SIZE)
+
+    def set_label_text(self, operation_string):
+        self.clear()
+        operation = operation_string.split(";")
+        length = len(operation)
+        if length == 1:
+            self.main_label.setText(f"{operation[0]}")
+            self.second_label.setVisible(False)
+        elif length == 2:
+            self.second_label.setVisible(True)
+            self.main_label.setText("0")
+            self.second_label.setText(f"{operation[0]} {operation[1]}")
+        elif length == 3:
+            self.main_label.setText(f"{operation[2]}")
+            self.second_label.setText(f"{operation[0]} {operation[1]}")
+        else:
+            raise RuntimeError(f"Bad argument: {operation_string} ")
+
+    def clear(self):
+        self.main_label.setText("")
+        self.second_label.setText("")
+
+
+class GUICalculator2(QWidget):
+    BUTTONS = "123+456-789*C0=/"
+    BUTTON_S_HORIZONTAL: int = 100
+    BUTTON_S_VERT: int = 50
+    NUMBER_BUTTONS_HORIZONTAL: int = 4
+    HORIZONTAL_MAX_SIZE: int = 400
+    VERTICAL_MAX_SIZE: int = 500
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.buffer: CalculadoraBuffer = CalculadoraBuffer()
+        self.main_layout: QVBoxLayout = QVBoxLayout()
+        self.buttons: dict = {}
+        self.layouts: list = []
+        self.result_label: CalculatorLabel = CalculatorLabel()
+        self.setLayout(self.main_layout)
+        self.main_layout.addWidget(self.result_label)
+        for x in range(0, len(self.BUTTONS)):  # Para que un while?
+            new_button: CalculatorButton = CalculatorButton("&" + self.BUTTONS[x], x)
+            self.buttons[new_button] = self.BUTTONS[x]
+            if x % 4 == 0:
+                new_layout = QHBoxLayout()
+                self.main_layout.addLayout(new_layout)
+                self.layouts.append(new_layout)
+            new_button.setFixedSize(self.BUTTON_S_HORIZONTAL, self.BUTTON_S_VERT)
+            new_button.clicked.connect(self.socket)
+            new_button.setFont(QFont('Arial', 25))
+            self.layouts[x // self.NUMBER_BUTTONS_HORIZONTAL].addWidget(new_button)
+
+    def socket(self):
+        but = self.sender()
+        self.buffer + GUICalculator2.BUTTONS[but.id]
+        self.result_label.set_label_text(f"{self.buffer}")
+
+    def keyPressEvent(self, event: QKeyEvent):  # Eventos de teclado
+        button_key = event.text().upper()
+        print(button_key)
+        if button_key in self.BUTTONS or event.key() == Qt.Key_Enter:
+            for button in self.buttons:
+                value = self.buttons[button]
+                if value == button_key or (event.key() == Qt.Key_Enter and value == "="):
+                    button.click()
+        elif event.key() == Qt.Key_Backspace:
+            self.buffer - 1
+            self.result_label.set_label_text(f"{self.buffer}")
+
+
+class CalculatorButton(QPushButton):
+    def __init__(self, text: str, id: int):
+        super().__init__()
+        self.id: int = id
+        self.setText(text)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = GUICalculator2()
+    window.show()
+    app.exec_()
+    pass
